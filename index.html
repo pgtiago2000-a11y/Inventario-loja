@@ -1048,19 +1048,18 @@
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
                 const extractedRows = [];
-
-                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                    const page = await pdf.getPage(pageNum);
-                    const textContent = await page.getTextContent();
-
-                    // Agrupar itens de texto pela coordenada Y (mesma linha visual no relatório)
+                    // Agrupar itens de texto pela coordenada Y (tolerância de 6px para não partir a mesma linha em duas)
                     const linesMap = {};
                     for (const item of textContent.items) {
                         const str = item.str.trim();
                         if (!str) continue;
-                        const y = Math.round(item.transform[5] / 3) * 3;
-                        if (!linesMap[y]) linesMap[y] = [];
-                        linesMap[y].push({ x: item.transform[4], text: str });
+                        const rawY = item.transform[5];
+                        let matchedY = Object.keys(linesMap).map(Number).find(y => Math.abs(y - rawY) <= 5);
+                        if (matchedY === undefined) {
+                            matchedY = rawY;
+                            linesMap[matchedY] = [];
+                        }
+                        linesMap[matchedY].push({ x: item.transform[4], text: str });
                     }
 
                     const sortedYs = Object.keys(linesMap).map(Number).sort((a, b) => b - a);
@@ -1086,8 +1085,7 @@
                         }
 
                         // Procurar colunas numéricas finais (Stock Real, PC Médio, PC Último, PC Ref., Valor Stock)
-                        // Exemplo típico: [Ref] [Descrição...] [Un/Mt] [2,000] [25,9900] [26,8800] [26,8800] [51,98]
-                        const numPattern = /^-?\d[\d\s]*,\d{2,4}$/;
+                        const numPattern = /^-?\d[\d\s]*[.,]\d{2,4}$/;
                         const numIndices = [];
                         rowItems.forEach((cell, idx) => {
                             if (numPattern.test(cell.text)) {
@@ -1095,13 +1093,14 @@
                             }
                         });
 
-                        if (numIndices.length >= 2 && rowItems.length >= 4) {
+                        // Uma linha válida de artigo tem sempre os valores numéricos à direita (Stock Real + preços)
+                        if (numIndices.length >= 3 && rowItems.length >= 5) {
                             const firstNumIdx = numIndices[0];
                             const stockStr = rowItems[firstNumIdx].text.replace(/\s+/g, '').replace(',', '.');
                             const sysStock = parseFloat(stockStr) || 0;
 
                             const leftCells = rowItems.slice(0, firstNumIdx).map(c => c.text);
-                            const ref = leftCells[0] || '';
+                            const ref = (leftCells[0] || '').trim();
                             let unit = 'Un';
                             const descParts = [];
 
@@ -1115,13 +1114,16 @@
                             }
 
                             const desc = descParts.join(' ').trim();
-                            if (ref && (desc || sysStock !== 0)) {
+                            if (ref && desc && !extractedRows.some(r => r.ref === ref)) {
                                 extractedRows.push({
-                                    'Referencia': ref,
-                                    'Codigo_Barras': '',
-                                    'Descricao': desc || ref,
-                                    'Unidade': unit,
-                                    'Stock_Real': sysStock
+                                    id: 'pdf_' + Date.now() + '_' + extractedRows.length,
+                                    ref: ref,
+                                    ean: '',
+                                    desc: desc,
+                                    unit: unit,
+                                    sysStock: sysStock,
+                                    counted: null,
+                                    updatedAt: null
                                 });
                             }
                         }
@@ -1133,15 +1135,51 @@
                     return;
                 }
 
-                rawImportedRows = extractedRows;
-                importedHeaders = ['Referencia', 'Codigo_Barras', 'Descricao', 'Unidade', 'Stock_Real'];
-                populateColumnSelectors(importedHeaders);
-                document.getElementById('importPreviewCount').textContent = `${extractedRows.length} artigos extraídos do PDF (${pdf.numPages} páginas)`;
-                document.getElementById('columnMappingSection').classList.remove('hidden');
-                showToast(`${extractedRows.length} artigos lidos do PDF!`);
+                // Carrega diretamente no catálogo sem precisar de mapear colunas
+                catalog = extractedRows;
+                saveToStorage();
+                document.getElementById('columnMappingSection').classList.add('hidden');
+                closeImportModal();
+                renderUI();
+                showToast(`${catalog.length} artigos carregados do PDF (${pdf.numPages} págs)!`);
             } catch (err) {
                 console.error(err);
                 showToast('Erro ao processar o ficheiro PDF.');
+            }
+        }
+
+        function openCountModal(itemId, defaultAddQty = 1) {
+            const item = catalog.find(i => i.id === itemId);
+            if (!item) return;
+
+            activeItemId = itemId;
+            document.getElementById('modalItemRef').textContent = item.ref || 'S/REF';
+            document.getElementById('modalItemEan').textContent = item.ean ? `• EAN: ${item.ean}` : '';
+            document.getElementById('modalItemDesc').textContent = item.desc || '';
+            document.getElementById('modalEanInput').value = item.ean || '';
+            document.getElementById('modalSysStock').textContent = Number(item.sysStock || 0);
+            document.getElementById('modalCurrentCounted').textContent =
+                (item.counted !== null && item.counted !== undefined) ? Number(item.counted) : 0;
+
+            setQtyMode('add');
+            document.getElementById('modalQtyInput').value = defaultAddQty;
+            document.getElementById('countModal').classList.remove('hidden');
+        }
+
+        function updateActiveItemEan() {
+            const item = catalog.find(i => i.id === activeItemId);
+            if (!item) return;
+            const newEan = document.getElementById('modalEanInput').value.trim();
+            item.ean = newEan;
+            document.getElementById('modalItemEan').textContent = newEan ? `• EAN: ${newEan}` : '';
+            saveToStorage();
+        }
+
+        async function toggleLinkEanScanner() {
+            if (isLinkScanning) {
+                await stopLinkEanScanner();
+            } else {
+                await startLinkEanScanner();
             }
         }
 
@@ -1210,6 +1248,9 @@
         }
 
         function closeCountModal() {
+            if (isLinkScanning) {
+                stopLinkEanScanner();
+            }
             document.getElementById('countModal').classList.add('hidden');
             activeItemId = null;
         }
@@ -1367,46 +1408,8 @@
         }
 
         // =========================================================================
-        // IMPORTAÇÃO EXCEL / CSV (ETICADATA) E DADOS DE EXEMPLO
+        // MAPEAMENTO DE COLUNAS EXCEL / CSV E DADOS DE EXEMPLO
         // =========================================================================
-        function openImportModal() {
-            document.getElementById('importModal').classList.remove('hidden');
-        }
-
-        function closeImportModal() {
-            document.getElementById('importModal').classList.add('hidden');
-        }
-
-        function handleImportFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const json = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
-
-                    if (!json || json.length === 0) {
-                        showToast('O ficheiro está vazio.');
-                        return;
-                    }
-
-                    rawImportedRows = json;
-                    importedHeaders = Object.keys(json[0]);
-
-                    populateColumnSelectors(importedHeaders);
-                    document.getElementById('importPreviewCount').textContent = `${json.length} artigos detetados no ficheiro`;
-                    document.getElementById('columnMappingSection').classList.remove('hidden');
-                } catch (err) {
-                    showToast('Erro ao ler o ficheiro Excel/CSV.');
-                }
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
         function populateColumnSelectors(headers) {
             const selectors = ['mapColRef', 'mapColEan', 'mapColDesc', 'mapColStock'];
             selectors.forEach(id => {
