@@ -330,6 +330,23 @@
                 </button>
             </div>
 
+            <!-- Associar / Editar Código de Barras (EAN) para gravar no Excel -->
+            <div class="bg-slate-850 p-2.5 rounded-2xl border border-slate-800 space-y-2">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="min-w-0 flex-1">
+                        <span class="text-[10px] uppercase tracking-wider text-slate-400 block">Código de Barras (EAN p/ Excel)</span>
+                        <input type="text" id="modalEanInput" oninput="updateActiveItemEan()" placeholder="Sem código de barras associado" class="w-full bg-transparent text-xs font-mono font-bold text-amber-300 placeholder-slate-500 outline-none mt-0.5">
+                    </div>
+                    <button id="btnLinkEanScan" onclick="toggleLinkEanScanner()" class="shrink-0 px-3 py-2 rounded-xl bg-ag-petrol hover:bg-ag-petrolLight text-ag-gold border border-ag-gold/40 text-xs font-bold flex items-center gap-1.5 transition active:scale-95">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+                        <span id="btnLinkEanText">Ler EAN</span>
+                    </button>
+                </div>
+                <div id="linkScannerWrapper" class="hidden rounded-xl overflow-hidden bg-slate-950 border border-slate-700">
+                    <div id="linkReader" class="w-full"></div>
+                </div>
+            </div>
+
             <!-- Estado Atual -->
             <div class="grid grid-cols-2 gap-2.5 bg-slate-850 p-3 rounded-2xl border border-slate-800">
                 <div class="text-center border-r border-slate-800">
@@ -605,6 +622,10 @@
         let torchOn = false;
         let lastScannedCode = '';
         let lastScanTime = 0;
+
+        // Variáveis para Scanner de Associação de EAN no Modal
+        let linkQrCode = null;
+        let isLinkScanning = false;
 
         // Inicialização ao carregar página
         document.addEventListener('DOMContentLoaded', () => {
@@ -972,7 +993,8 @@
 
             activeItemId = itemId;
             document.getElementById('modalItemRef').textContent = item.ref || 'S/REF';
-            document.getElementById('modalItemEan').textContent = item.ean || '';
+            document.getElementById('modalItemEan').textContent = item.ean ? `• ${item.ean}` : '';
+            document.getElementById('modalEanInput').value = item.ean || '';
             document.getElementById('modalItemDesc').textContent = item.desc;
             document.getElementById('modalSysStock').textContent = Number(item.sysStock || 0);
             document.getElementById('modalCurrentCounted').textContent = (item.counted !== null && item.counted !== undefined) ? item.counted : '0';
@@ -980,6 +1002,93 @@
             setQtyMode('add');
             document.getElementById('modalQtyInput').value = presetQty;
             document.getElementById('countModal').classList.remove('hidden');
+        }
+
+        async function closeCountModal() {
+            await stopLinkEanScanner();
+            document.getElementById('countModal').classList.add('hidden');
+            activeItemId = null;
+        }
+
+        function updateActiveItemEan() {
+            const item = catalog.find(i => i.id === activeItemId);
+            if (!item) return;
+            const newEan = document.getElementById('modalEanInput').value.trim();
+            item.ean = newEan;
+            document.getElementById('modalItemEan').textContent = newEan ? `• ${newEan}` : '';
+            saveToStorage();
+        }
+
+        async function toggleLinkEanScanner() {
+            if (isLinkScanning) {
+                await stopLinkEanScanner();
+            } else {
+                await startLinkEanScanner();
+            }
+        }
+
+        async function startLinkEanScanner() {
+            // Se o scanner principal estiver aberto, fecha-o primeiro para libertar a câmara no iOS
+            if (isScanning) {
+                await stopScanner();
+            }
+
+            const wrapper = document.getElementById('linkScannerWrapper');
+            const btnText = document.getElementById('btnLinkEanText');
+            wrapper.classList.remove('hidden');
+
+            try {
+                if (!linkQrCode) {
+                    linkQrCode = new Html5Qrcode("linkReader");
+                }
+
+                await linkQrCode.start(
+                    { facingMode: "environment" },
+                    {
+                        fps: 12,
+                        qrbox: { width: 240, height: 110 },
+                        aspectRatio: 2.0
+                    },
+                    async (decodedText) => {
+                        const cleanEan = decodedText.trim();
+                        const duplicate = catalog.find(i => i.id !== activeItemId && i.ean && i.ean.trim() === cleanEan);
+                        
+                        document.getElementById('modalEanInput').value = cleanEan;
+                        updateActiveItemEan();
+                        triggerScanFeedback();
+                        await stopLinkEanScanner();
+
+                        if (duplicate) {
+                            showToast(`Aviso: EAN ${cleanEan} também existe na ref. ${duplicate.ref}`);
+                        } else {
+                            showToast(`EAN ${cleanEan} associado ao artigo!`);
+                        }
+                    },
+                    () => {}
+                );
+
+                isLinkScanning = true;
+                btnText.textContent = 'Fechar';
+            } catch (err) {
+                wrapper.classList.add('hidden');
+                isLinkScanning = false;
+                showToast('Não foi possível abrir a câmara para ler o EAN.');
+            }
+        }
+
+        async function stopLinkEanScanner() {
+            const wrapper = document.getElementById('linkScannerWrapper');
+            const btnText = document.getElementById('btnLinkEanText');
+            try {
+                if (linkQrCode && isLinkScanning) {
+                    await linkQrCode.stop();
+                }
+            } catch (e) {
+                console.warn(e);
+            }
+            isLinkScanning = false;
+            if (wrapper) wrapper.classList.add('hidden');
+            if (btnText) btnText.textContent = 'Ler EAN';
         }
 
         function closeCountModal() {
