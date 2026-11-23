@@ -337,10 +337,10 @@
             <div class="bg-slate-850 p-2.5 rounded-2xl border border-slate-800 space-y-2">
                 <div class="flex items-center justify-between gap-2">
                     <div class="min-w-0 flex-1">
-                        <span class="text-[10px] uppercase tracking-wider text-slate-400 block">Código de Barras (EAN p/ Excel)</span>
-                        <input type="text" id="modalEanInput" oninput="updateActiveItemEan()" placeholder="Sem código de barras associado" class="w-full bg-transparent text-xs font-mono font-bold text-amber-300 placeholder-slate-500 outline-none mt-0.5">
+                        <span class="text-[10px] uppercase tracking-wider text-slate-400 block">Código de Barras (Ler ou Escrever à mão)</span>
+                        <input type="text" id="modalEanInput" inputmode="numeric" pattern="[0-9]*" oninput="updateActiveItemEan()" placeholder="Toque aqui para digitar o EAN..." class="w-full bg-slate-900/90 border border-slate-700/80 focus:border-ag-gold rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-amber-300 placeholder-slate-500 outline-none mt-1">
                     </div>
-                    <button id="btnLinkEanScan" onclick="toggleLinkEanScanner()" class="shrink-0 px-3 py-2 rounded-xl bg-ag-petrol hover:bg-ag-petrolLight text-ag-gold border border-ag-gold/40 text-xs font-bold flex items-center gap-1.5 transition active:scale-95">
+                    <button id="btnLinkEanScan" onclick="toggleLinkEanScanner()" class="shrink-0 self-end px-3 py-2 rounded-xl bg-ag-petrol hover:bg-ag-petrolLight text-ag-gold border border-ag-gold/40 text-xs font-bold flex items-center gap-1.5 transition active:scale-95">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
                         <span id="btnLinkEanText">Ler EAN</span>
                     </button>
