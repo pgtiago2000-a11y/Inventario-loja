@@ -1,1 +1,1376 @@
+<!DOCTYPE html>
+<html lang="pt-PT" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AG Inventário">
+    <meta name="theme-color" content="#07151d">
+    <link id="appleTouchIcon" rel="apple-touch-icon" href="">
+    <link id="faviconLink" rel="icon" type="image/png" href="">
+    <title>António Garcia — Inventário Loja</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                    },
+                    colors: {
+                        /* Paleta oficial harmonizada com o logótipo António Garcia (#063242 e #FFC700) */
+                        ag: {
+                            petrol: '#063242',
+                            petrolLight: '#0c4a60',
+                            gold: '#ffc700',
+                            goldHover: '#ffd43b',
+                        },
+                        slate: {
+                            750: '#163545',
+                            800: '#102835',
+                            850: '#0c202b',
+                            900: '#091922',
+                            950: '#050e14',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
 
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <!-- SheetJS (XLSX / CSV Import & Export) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <!-- HTML5-QRCode (Leitor de Código de Barras Câmara iOS) -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+    <style>
+        /* Ajustes específicos para toque fluido no iOS com fundo azul petróleo profundo da marca */
+        body {
+            background-color: #06131a;
+            color: #f8fafc;
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: contain;
+        }
+        
+        /* Estilização do leitor html5-qrcode para esconder elementos nativos desnecessários */
+        #reader video {
+            border-radius: 0.75rem !important;
+            object-fit: cover !important;
+            width: 100% !important;
+        }
+        #reader__scan_region {
+            border-radius: 0.75rem !important;
+            overflow: hidden;
+        }
+        #reader__dashboard_section_csr span,
+        #reader__dashboard_section_swaplink {
+            display: none !important;
+        }
+
+        /* Animação flash verde ao ler código */
+        @keyframes scanFlash {
+            0% { background-color: rgba(16, 185, 129, 0.45); }
+            100% { background-color: transparent; }
+        }
+        .flash-success {
+            animation: scanFlash 0.45s ease-out;
+        }
+
+        /* Esconder setas de input numérico */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col pb-24 select-none">
+
+    <!-- Flash Overlay para feedback visual de leitura -->
+    <div id="flashOverlay" class="fixed inset-0 pointer-events-none z-50"></div>
+
+    <!-- Cabeçalho Fixo com o Logótipo Original António Garcia em Cartão Branco Limpo -->
+    <header class="sticky top-0 z-30 bg-[#051016]/95 backdrop-blur-md border-b border-ag-petrolLight/40 px-3.5 py-2.5 shadow-xl">
+        <div class="max-w-2xl mx-auto flex items-center justify-between gap-2.5">
+            <!-- Cartão Branco Fiel ao Original (preserva #063242 e #FFC700 sem distorções) -->
+            <div onclick="openLogoModal()" class="flex items-center gap-2.5 min-w-0 cursor-pointer group" title="Toque para carregar o ficheiro logo.png original ou personalizar">
+                <div id="brandLogoContainer" class="shrink-0 bg-white rounded-2xl px-3 py-1.5 shadow-md ring-1 ring-amber-400/50 group-hover:ring-amber-400 transition flex items-center justify-center">
+                    <!-- Tenta carregar automaticamente 'logo.png' do repositório GitHub Pages; se não existir ainda, mostra o desenho vetorial 100% fiel ao original -->
+                    <img id="repoLogoImg" src="logo.png" alt="António Garcia - Iluminação e Electricidade" onload="onRepoLogoLoaded()" onerror="onRepoLogoError()" class="hidden h-11 sm:h-13 w-auto object-contain">
+                    
+                    <svg id="defaultBrandSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 142" class="h-11 sm:h-13 w-auto overflow-visible">
+                        <defs>
+                            <radialGradient id="origBulbGlow" cx="50%" cy="46%" r="55%">
+                                <stop offset="0%" stop-color="#ffd000" stop-opacity="0.65"/>
+                                <stop offset="100%" stop-color="#ffd000" stop-opacity="0"/>
+                            </radialGradient>
+                        </defs>
+
+                        <!-- Fundo branco puro original -->
+                        <rect width="340" height="142" rx="10" fill="#ffffff"/>
+
+                        <!-- Brilho amarelo suave em volta da lâmpada -->
+                        <circle cx="131" cy="46" r="30" fill="url(#origBulbGlow)"/>
+
+                        <!-- Letra A em Azul Petróleo Original (#063242) -->
+                        <path d="M 85 82 L 113 13 L 136 13 L 147 38 C 142 31 136 28 128 28 C 117 28 110 35 110 45 C 110 53 114 58 119 63 L 111 82 Z" fill="#063242"/>
+                        
+                        <!-- Letra G em Azul Petróleo Original (#063242) -->
+                        <path d="M 227 32 C 219 18 205 11 186 11 C 158 11 141 29 141 48 C 141 69 158 84 187 84 C 209 84 226 73 228 53 L 228 45 L 184 45 L 184 57 L 209 57 C 206 66 198 70 187 70 C 169 70 159 61 159 48 C 159 34 169 25 186 25 C 198 25 206 29 210 37 Z" fill="#063242"/>
+
+                        <!-- Raios da Lâmpada Amarela (#FFC700) -->
+                        <g stroke="#ffc700" stroke-width="2.8" stroke-linecap="round">
+                            <line x1="113" y1="23" x2="108" y2="17"/>
+                            <line x1="131" y1="17" x2="131" y2="10"/>
+                            <line x1="149" y1="23" x2="154" y2="17"/>
+                            <line x1="104" y1="38" x2="97" y2="37"/>
+                            <line x1="158" y1="38" x2="165" y2="37"/>
+                        </g>
+
+                        <!-- Bulbo da Lâmpada Amarela (#FFC700) -->
+                        <path d="M 131 24 C 119 24 111 32 111 43 C 111 50 116 55 120 62 L 142 62 C 146 55 151 50 151 43 C 151 32 143 24 131 24 Z" fill="#ffc700" stroke="#063242" stroke-width="2.2"/>
+                        <path d="M 120 40 C 120 34 124 30 129 29" fill="none" stroke="#fff3b0" stroke-width="2.2" stroke-linecap="round"/>
+                        
+                        <!-- Casquilho / Base da Lâmpada em Azul Petróleo (#063242) -->
+                        <rect x="121" y="64" width="20" height="3.2" rx="1.6" fill="#063242"/>
+                        <rect x="122.5" y="69" width="17" height="3.2" rx="1.6" fill="#063242"/>
+                        <path d="M 125 74 L 137 74 L 134 78 L 128 78 Z" fill="#063242"/>
+
+                        <!-- Arco Amarelo Curvo Original (#FFC700) -->
+                        <path d="M 74 96 Q 170 80 266 96 Q 170 86 74 96 Z" fill="#ffc700"/>
+
+                        <!-- Texto Original: ANTÓNIO GARCIA em Azul Petróleo (#063242) -->
+                        <text x="170" y="118" text-anchor="middle" fill="#063242" font-family="Inter, -apple-system, sans-serif" font-weight="800" font-size="24" letter-spacing="1.1">ANTÓNIO GARCIA</text>
+                        
+                        <!-- Subtítulo Original: ILUMINAÇÃO E ELECTRICIDADE -->
+                        <text x="170" y="134" text-anchor="middle" fill="#1e293b" font-family="Inter, -apple-system, sans-serif" font-weight="600" font-size="10.4" letter-spacing="2.3">ILUMINAÇÃO E ELECTRICIDADE</text>
+                    </svg>
+
+                    <img id="customBrandImg" src="" alt="António Garcia" class="hidden h-11 sm:h-13 w-auto object-contain">
+                </div>
+
+                <div class="hidden sm:block border-l border-ag-petrolLight/50 pl-2.5">
+                    <span class="text-[11px] font-extrabold uppercase tracking-wider text-ag-gold block">Inventário Loja</span>
+                    <p id="catalogStatus" class="text-[11px] text-slate-300">0 artigos</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+                <button onclick="openHelpModal()" class="p-2.5 rounded-xl bg-ag-petrol hover:bg-ag-petrolLight text-slate-200 border border-ag-petrolLight/60 transition active:scale-95" title="Ajuda e Eticadata">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </button>
+                <button onclick="openImportModal()" class="px-3 py-2.5 rounded-xl bg-ag-petrol hover:bg-ag-petrolLight text-amber-300 border border-amber-400/35 text-xs font-bold flex items-center gap-1.5 transition active:scale-95">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    <span>Importar</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Conteúdo Principal -->
+    <main class="flex-1 max-w-2xl w-full mx-auto px-4 pt-4 space-y-4">
+
+        <!-- Cartões de Resumo em Tempo Real (Clicáveis para filtrar) -->
+        <section class="grid grid-cols-3 gap-2.5">
+            <button onclick="setFilterTab('counted')" class="bg-slate-900/95 hover:bg-slate-800 border border-ag-petrolLight/45 rounded-2xl p-3 text-center transition active:scale-95">
+                <span class="block text-[11px] uppercase tracking-wider text-slate-300 font-medium">Contados</span>
+                <span id="statCountedItems" class="text-xl font-extrabold text-white mt-0.5 block">0</span>
+            </button>
+            <div class="bg-slate-900/95 border border-ag-petrolLight/45 rounded-2xl p-3 text-center">
+                <span class="block text-[11px] uppercase tracking-wider text-slate-300 font-medium">Unidades</span>
+                <span id="statTotalUnits" class="text-xl font-extrabold text-emerald-400 mt-0.5 block">0</span>
+            </div>
+            <button onclick="setFilterTab('diff')" class="bg-slate-900/95 hover:bg-slate-800 border border-ag-petrolLight/45 rounded-2xl p-3 text-center transition active:scale-95">
+                <span class="block text-[11px] uppercase tracking-wider text-slate-300 font-medium">C/ Diferença</span>
+                <span id="statDiffItems" class="text-xl font-extrabold text-ag-gold mt-0.5 block">0</span>
+            </button>
+        </section>
+
+        <!-- Secção do Leitor de Código de Barras (Câmara) -->
+        <section class="bg-slate-900/80 border border-ag-petrolLight/45 rounded-2xl p-3.5 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+                <button id="btnToggleScanner" onclick="toggleScanner()" class="w-full py-3.5 px-4 rounded-xl bg-ag-gold hover:bg-ag-goldHover text-ag-petrol font-black text-base shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2.5 transition active:scale-[0.99]">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>
+                    <span id="btnScannerText">Ler Código de Barras</span>
+                </button>
+            </div>
+
+            <!-- Contentor da Câmara -->
+            <div id="scannerContainer" class="hidden space-y-2.5">
+                <div class="relative rounded-xl overflow-hidden bg-slate-950 border border-slate-700">
+                    <div id="reader" class="w-full"></div>
+                </div>
+                <div class="flex items-center justify-between gap-2 text-xs text-slate-400 px-1">
+                    <span>Aponte para o EAN (caixas, disjuntores...)</span>
+                    <div class="flex items-center gap-2">
+                        <button id="btnTorch" onclick="toggleTorch()" class="hidden px-2.5 py-1 rounded-lg bg-slate-800 text-amber-300 border border-slate-700 font-semibold">
+                            Lanterna
+                        </button>
+                        <button onclick="stopScanner()" class="text-rose-400 font-semibold py-1 px-2">Fechar</button>
+                    </div>
+                </div>
+                <div id="scannerError" class="hidden p-3 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs leading-relaxed"></div>
+            </div>
+        </section>
+
+        <!-- Barra de Pesquisa Rápida -->
+        <section class="space-y-2">
+            <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </div>
+                <input 
+                    type="text" 
+                    id="searchInput" 
+                    oninput="handleSearch()"
+                    placeholder="Pesquisar Ref., EAN ou Artigo (ex: 21011, C16, XV)..." 
+                    class="w-full pl-11 pr-10 py-3.5 bg-slate-800 border border-slate-700 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-2xl text-white placeholder-slate-400 text-base outline-none transition"
+                >
+                <button id="clearSearchBtn" onclick="clearSearch()" class="hidden absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            
+            <!-- Botão para criar artigo novo na hora caso não exista no catálogo -->
+            <div id="newArticlePrompt" class="hidden">
+                <button onclick="openNewItemModal()" class="w-full py-3 px-4 rounded-xl bg-ag-petrol/80 border border-ag-gold/40 text-amber-200 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-ag-petrol transition">
+                    <span>+ Criar artigo novo com "<strong id="newArticleQueryText"></strong>"</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Separadores de Vista: Todos vs Contados vs Por Contar vs Diferenças -->
+        <section class="space-y-3">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2 gap-1 overflow-x-auto">
+                <div class="flex gap-1.5 shrink-0">
+                    <button id="tabAll" onclick="setFilterTab('all')" class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-white border border-slate-700">
+                        Todos
+                    </button>
+                    <button id="tabCounted" onclick="setFilterTab('counted')" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white">
+                        Contados (<span id="tabCountedBadge">0</span>)
+                    </button>
+                    <button id="tabPending" onclick="setFilterTab('pending')" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white">
+                        Por Contar
+                    </button>
+                    <button id="tabDiff" onclick="setFilterTab('diff')" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white">
+                        Diferenças
+                    </button>
+                </div>
+                <button onclick="openNewItemModal()" class="shrink-0 text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 py-1 px-2">
+                    + Novo
+                </button>
+            </div>
+
+            <!-- Lista de Artigos -->
+            <div id="itemsList" class="space-y-2.5">
+                <!-- Preenchido dinamicamente via JS -->
+            </div>
+
+            <!-- Estado Vazio Inicial -->
+            <div id="emptyState" class="hidden bg-slate-800/40 border border-slate-800 rounded-2xl p-6 text-center space-y-4">
+                <div class="w-12 h-12 rounded-2xl bg-slate-800 mx-auto flex items-center justify-center text-slate-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                </div>
+                <div class="space-y-1">
+                    <h3 class="text-base font-bold text-white">Sem artigos carregados</h3>
+                    <p class="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+                        Importe a listagem de artigos exportada do Eticadata (Excel ou CSV) ou carregue dados de teste para experimentar.
+                    </p>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-2.5 justify-center pt-1">
+                    <button onclick="openImportModal()" class="px-4 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-sm transition">
+                        Importar Excel / CSV
+                    </button>
+                    <button onclick="loadSampleData()" class="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-sm transition">
+                        Carregar Dados de Exemplo
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Barra Inferior Fixa (Ações Principais: Exportar & Limpar) -->
+    <footer class="fixed bottom-0 inset-x-0 z-30 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-4 py-3">
+        <div class="max-w-2xl mx-auto flex items-center justify-between gap-3">
+            <button onclick="openResetModal()" class="px-3.5 py-3 rounded-xl bg-slate-800 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 border border-slate-700 text-xs font-semibold transition active:scale-95">
+                Limpar
+            </button>
+            
+            <button onclick="openExportModal()" class="flex-1 py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition active:scale-[0.99]">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span>Exportar Inventário</span>
+            </button>
+        </div>
+    </footer>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL 1: CONTAGEM DE ARTIGO                                           -->
+    <!-- ===================================================================== -->
+    <div id="countModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-slate-900 border-t sm:border border-ag-petrolLight/60 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4">
+            <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                    <span id="modalItemRef" class="text-xs font-mono font-bold text-ag-gold bg-ag-petrol px-2 py-0.5 rounded-md">REF</span>
+                    <span id="modalItemEan" class="text-xs font-mono text-slate-400 ml-1.5"></span>
+                    <h2 id="modalItemDesc" class="text-base font-bold text-white mt-1.5 leading-snug">Descrição do Artigo</h2>
+                </div>
+                <button onclick="closeCountModal()" class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+
+            <!-- Estado Atual -->
+            <div class="grid grid-cols-2 gap-2.5 bg-slate-850 p-3 rounded-2xl border border-slate-800">
+                <div class="text-center border-r border-slate-800">
+                    <span class="text-[11px] text-slate-400 block">Stock Sistema</span>
+                    <span id="modalSysStock" class="text-lg font-bold text-slate-200">0</span>
+                </div>
+                <div class="text-center">
+                    <span class="text-[11px] text-slate-400 block">Já Contado</span>
+                    <span id="modalCurrentCounted" class="text-lg font-extrabold text-emerald-400">0</span>
+                </div>
+            </div>
+
+            <!-- Modo Somar vs Definir Total -->
+            <div class="grid grid-cols-2 gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <button id="btnModeAdd" onclick="setQtyMode('add')" class="py-2 rounded-lg text-xs font-extrabold bg-ag-gold text-ag-petrol transition">
+                    + Somar à contagem
+                </button>
+                <button id="btnModeSet" onclick="setQtyMode('set')" class="py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition">
+                    Definir total exato
+                </button>
+            </div>
+
+            <!-- Input Numérico e Atalhos de Caixa -->
+            <div class="space-y-2.5">
+                <div class="flex items-center gap-2">
+                    <button onclick="adjustModalQty(-1)" class="w-14 h-14 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white text-2xl font-bold flex items-center justify-center active:scale-95">-</button>
+                    <input type="number" id="modalQtyInput" step="any" inputmode="decimal" value="1" class="flex-1 h-14 bg-slate-950 border border-slate-700 focus:border-ag-gold rounded-2xl text-center text-2xl font-black text-white outline-none">
+                    <button onclick="adjustModalQty(1)" class="w-14 h-14 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white text-2xl font-bold flex items-center justify-center active:scale-95">+</button>
+                </div>
+
+                <!-- Atalhos rápidos típicos de material elétrico (caixas de 10, 20, 50, 100m) -->
+                <div class="grid grid-cols-4 gap-1.5">
+                    <button onclick="quickAddQty(5)" class="py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">+5</button>
+                    <button onclick="quickAddQty(10)" class="py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">+10</button>
+                    <button onclick="quickAddQty(25)" class="py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">+25</button>
+                    <button onclick="quickAddQty(100)" class="py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-amber-300">+100</button>
+                </div>
+            </div>
+
+            <div class="flex gap-2.5 pt-1">
+                <button onclick="resetSingleItemCount()" class="px-4 py-3.5 rounded-xl bg-slate-800 text-rose-300 text-xs font-bold">
+                    Zerar
+                </button>
+                <button onclick="confirmItemCount()" class="flex-1 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm shadow-lg">
+                    Confirmar Contagem
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL 2: IMPORTAR EXCEL / CSV (ETICADATA)                             -->
+    <!-- ===================================================================== -->
+    <div id="importModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-slate-900 border-t sm:border border-ag-petrolLight/60 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-bold text-white">Importar Artigos (Eticadata)</h2>
+                <button onclick="closeImportModal()" class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+
+            <p class="text-xs text-slate-300 leading-relaxed">
+                Selecione o ficheiro <strong>.XLSX</strong>, <strong>.XLS</strong> ou <strong>.CSV</strong> exportado do Eticadata com a listagem de artigos.
+            </p>
+
+            <label class="w-full py-4 px-4 rounded-2xl border-2 border-dashed border-ag-gold/50 bg-ag-petrol/40 hover:bg-ag-petrol/70 text-center cursor-pointer block transition">
+                <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" onchange="handleImportFile(event)" class="hidden">
+                <span class="text-sm font-bold text-ag-gold block">Escolher Ficheiro Excel ou CSV</span>
+                <span class="text-[11px] text-slate-400 mt-1 block">Os dados ficam guardados apenas no seu iPhone</span>
+            </label>
+
+            <!-- Mapeamento de Colunas -->
+            <div id="columnMappingSection" class="hidden space-y-3 bg-slate-850 p-3.5 rounded-2xl border border-slate-800">
+                <div class="text-xs font-bold text-emerald-400" id="importPreviewCount">0 linhas detetadas</div>
+                
+                <div class="space-y-2 text-xs">
+                    <div>
+                        <label class="text-slate-400 block mb-1">Coluna Código / Referência *</label>
+                        <select id="mapColRef" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"></select>
+                    </div>
+                    <div>
+                        <label class="text-slate-400 block mb-1">Coluna Código de Barras (EAN)</label>
+                        <select id="mapColEan" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"></select>
+                    </div>
+                    <div>
+                        <label class="text-slate-400 block mb-1">Coluna Descrição *</label>
+                        <select id="mapColDesc" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"></select>
+                    </div>
+                    <div>
+                        <label class="text-slate-400 block mb-1">Coluna Stock Atual (Sistema)</label>
+                        <select id="mapColStock" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white"></select>
+                    </div>
+                </div>
+
+                <button onclick="confirmImportMapping()" class="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm">
+                    Carregar Catálogo para Contagem
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL 3: CRIAR ARTIGO NOVO                                            -->
+    <!-- ===================================================================== -->
+    <div id="newItemModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-slate-900 border-t sm:border border-ag-petrolLight/60 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-bold text-white">Novo Artigo Manual</h2>
+                <button onclick="closeNewItemModal()" class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="text-slate-400 block mb-1">Referência Interna *</label>
+                    <input type="text" id="newItemRef" placeholder="Ex: 21011" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white text-sm">
+                </div>
+                <div>
+                    <label class="text-slate-400 block mb-1">Código de Barras (EAN)</label>
+                    <input type="text" id="newItemEan" placeholder="Ex: 5601234567890" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white text-sm">
+                </div>
+                <div>
+                    <label class="text-slate-400 block mb-1">Descrição do Artigo *</label>
+                    <input type="text" id="newItemDesc" placeholder="Ex: Comutador Lustre Efapel Logus 90" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white text-sm">
+                </div>
+                <div>
+                    <label class="text-slate-400 block mb-1">Quantidade Contada</label>
+                    <input type="number" id="newItemQty" value="1" step="any" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white text-sm font-bold">
+                </div>
+            </div>
+
+            <button onclick="saveNewItem()" class="w-full py-3.5 rounded-xl bg-ag-gold hover:bg-ag-goldHover text-ag-petrol font-black text-sm">
+                Guardar e Contar
+            </button>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL 4: EXPORTAR INVENTÁRIO                                          -->
+    <!-- ===================================================================== -->
+    <div id="exportModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-slate-900 border-t sm:border border-ag-petrolLight/60 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-bold text-white">Exportar Inventário</h2>
+                <button onclick="closeExportModal()" class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+
+            <div class="space-y-2 text-xs text-slate-300">
+                <label class="flex items-center gap-2.5 p-3 rounded-xl bg-slate-850 border border-slate-800 cursor-pointer">
+                    <input type="checkbox" id="exportOnlyCounted" checked class="w-4 h-4 accent-emerald-500">
+                    <span>Exportar apenas artigos com contagem registada</span>
+                </label>
+            </div>
+
+            <div class="grid grid-cols-1 gap-2.5">
+                <button onclick="exportData('xlsx')" class="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm">
+                    Descarregar Excel (.XLSX)
+                </button>
+                <button onclick="exportData('csv')" class="w-full py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 font-bold text-sm">
+                    Descarregar CSV (Eticadata)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL 5: LIMPAR DADOS                                                 -->
+    <!-- ===================================================================== -->
+    <div id="resetModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-slate-900 border-t sm:border border-ag-petrolLight/60 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-bold text-white">Limpar Inventário</h2>
+                <button onclick="closeResetModal()" class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">
+                Escolha se pretende apenas zerar as quantidades contadas (mantendo os artigos importados) ou apagar tudo.
+            </p>
+            <div class="space-y-2.5">
+                <button onclick="resetCountsOnly()" class="w-full py-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-sm">
+                    Zerar Apenas Contagens
+                </button>
+                <button onclick="resetAllData()" class="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm">
+                    Apagar Tudo (Catálogo e Contagens)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL 6: AJUDA RÁPIDA                                                 -->
+    <!-- ===================================================================== -->
+    <div id="helpModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-slate-900 border-t sm:border border-ag-petrolLight/60 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-3 text-xs text-slate-300 leading-relaxed">
+            <div class="flex items-center justify-between">
+                <h2 class="text-base font-bold text-white">Como usar no iPhone</h2>
+                <button onclick="closeHelpModal()" class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+            <p><strong>1. Importar do Eticadata:</strong> Exporte os artigos para Excel/CSV e importe aqui pelo botão <em>Importar</em>.</p>
+            <p><strong>2. Ler Código de Barras:</strong> Toque em <em>Ler Código de Barras</em> e aponte a câmara para o EAN. Em etiquetas pequenas, afaste um pouco o iPhone para focar melhor.</p>
+            <p><strong>3. Artigos sem EAN:</strong> Pesquise pela referência curta (ex: <code>21011</code> ou <code>C16</code>) e toque no artigo para somar a quantidade.</p>
+            <p><strong>4. Exportar:</strong> No final, toque em <em>Exportar Inventário</em> para gerar o ficheiro Excel/CSV pronto a importar no Eticadata.</p>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- MODAL 7: LOGÓTIPO ORIGINAL ANTÓNIO GARCIA (CARREGAR / GITHUB PAGES)   -->
+    <!-- ===================================================================== -->
+    <div id="logoModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-slate-900 border-t sm:border border-ag-petrolLight/60 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-bold text-white">Logótipo António Garcia</h2>
+                <button onclick="closeLogoModal()" class="p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+
+            <div class="bg-white rounded-2xl p-3 flex items-center justify-center border-2 border-ag-gold">
+                <img id="modalLogoPreview" src="" alt="Pré-visualização Logótipo" class="max-h-24 w-auto object-contain hidden">
+                <span id="modalLogoSvgNote" class="text-xs font-bold text-ag-petrol text-center">Emblema Original António Garcia (#063242 & #FFC700)</span>
+            </div>
+
+            <p class="text-xs text-slate-300 leading-relaxed">
+                O logótipo mantém as <strong>cores e fundo originais</strong> num cartão limpo integrado com o azul petróleo e o amarelo dourado da marca.
+                <br><br>
+                <strong>Dica para o GitHub:</strong> Se enviar o seu ficheiro <code>download.png</code> para o repositório com o nome <strong><code>logo.png</code></strong> (na mesma pasta do <code>index.html</code>), a app carrega-o automaticamente sempre que abrir!
+            </p>
+
+            <div class="grid grid-cols-1 gap-2.5">
+                <label class="w-full py-3.5 rounded-xl bg-ag-gold hover:bg-ag-goldHover text-ag-petrol font-extrabold text-sm text-center cursor-pointer block shadow-md">
+                    <input type="file" accept="image/*" onchange="handleCustomLogoUpload(event)" class="hidden">
+                    Selecionar Ficheiro Original (download.png) no iPhone
+                </label>
+
+                <button id="btnRestoreDefaultLogo" onclick="restoreDefaultLogo()" class="hidden w-full py-2.5 rounded-xl bg-slate-800 text-rose-300 text-xs font-semibold">
+                    Repor Emblema Original Embutido
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast de Notificação -->
+    <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 hidden px-4 py-2.5 rounded-full bg-slate-800 border border-slate-600 text-white text-xs font-bold shadow-xl transition-opacity">
+        Mensagem
+    </div>
+
+    <script>
+        // =========================================================================
+        // ESTADO GLOBAL E ARMAZENAMENTO LOCAL
+        // =========================================================================
+        const STORAGE_KEY = 'inventario_ag_eletrico_v1';
+        const CUSTOM_LOGO_KEY = 'inventario_ag_custom_logo';
+        
+        let catalog = []; // Array de objetos: { id, ref, ean, desc, sysStock, counted, updatedAt }
+        let currentFilterTab = 'all'; // 'all' | 'counted' | 'pending' | 'diff'
+        let activeItemId = null;
+        let qtyMode = 'add'; // 'add' | 'set'
+        
+        // Variáveis para Importação Excel/CSV
+        let rawImportedRows = [];
+        let importedHeaders = [];
+
+        // Variáveis para Scanner Câmara
+        let html5QrCode = null;
+        let isScanning = false;
+        let torchOn = false;
+        let lastScannedCode = '';
+        let lastScanTime = 0;
+
+        // Inicialização ao carregar página
+        document.addEventListener('DOMContentLoaded', () => {
+            generateAppIcons();
+            loadCustomLogo();
+            loadFromStorage();
+            renderUI();
+        });
+
+        // Gera dinamicamente o ícone Apple Touch Icon (ecrã principal iPhone) fiel às cores originais da marca
+        function generateAppIcons() {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = 180;
+                canvas.height = 180;
+                const ctx = canvas.getContext('2d');
+
+                // Fundo branco limpo original com borda inferior dourada
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, 180, 180);
+
+                // Brilho amarelo suave no centro da lâmpada
+                const grad = ctx.createRadialGradient(74, 72, 6, 74, 72, 55);
+                grad.addColorStop(0, 'rgba(255, 199, 0, 0.55)');
+                grad.addColorStop(1, 'rgba(255, 199, 0, 0)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 180, 180);
+
+                // Monograma AG em Azul Petróleo Original (#063242)
+                ctx.fillStyle = '#063242';
+                ctx.font = '800 72px Inter, -apple-system, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('AG', 92, 80);
+
+                // Lâmpada amarela original (#FFC700)
+                ctx.fillStyle = '#ffc700';
+                ctx.beginPath();
+                ctx.arc(63, 70, 13, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#063242';
+                ctx.fillRect(57, 81, 12, 6);
+
+                // Arco amarelo inferior (#FFC700)
+                ctx.strokeStyle = '#ffc700';
+                ctx.lineWidth = 5;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(28, 122);
+                ctx.quadraticCurveTo(90, 110, 152, 122);
+                ctx.stroke();
+
+                // Texto ANTÓNIO GARCIA em Azul Petróleo (#063242)
+                ctx.fillStyle = '#063242';
+                ctx.font = '800 13.5px Inter, -apple-system, sans-serif';
+                ctx.fillText('ANTÓNIO GARCIA', 90, 144);
+
+                const dataUrl = canvas.toDataURL('image/png');
+                document.getElementById('appleTouchIcon').href = dataUrl;
+                document.getElementById('faviconLink').href = dataUrl;
+            } catch (e) {
+                console.warn('Não foi possível gerar ícone dinâmico:', e);
+            }
+        }
+
+        function loadFromStorage() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    catalog = JSON.parse(saved);
+                }
+            } catch (e) {
+                console.error('Erro ao ler localStorage:', e);
+            }
+        }
+
+        function saveToStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(catalog));
+            } catch (e) {
+                showToast('Aviso: Memória local cheia!');
+            }
+        }
+
+        // =========================================================================
+        // GESTÃO DO LOGÓTIPO ORIGINAL (PRESERVA CORES E FUNDO ORIGINAL INTACTOS)
+        // =========================================================================
+        function onRepoLogoLoaded() {
+            // Se existir 'logo.png' no GitHub Pages e não houver override manual, usa o ficheiro original diretamente
+            if (!localStorage.getItem(CUSTOM_LOGO_KEY)) {
+                document.getElementById('defaultBrandSvg').classList.add('hidden');
+                document.getElementById('repoLogoImg').classList.remove('hidden');
+            }
+        }
+
+        function onRepoLogoError() {
+            // Se ainda não colocou 'logo.png' no repositório, mantém o emblema original embutido sem erro
+            document.getElementById('repoLogoImg').classList.add('hidden');
+            if (!localStorage.getItem(CUSTOM_LOGO_KEY)) {
+                document.getElementById('defaultBrandSvg').classList.remove('hidden');
+            }
+        }
+
+        function openLogoModal() {
+            const savedLogo = localStorage.getItem(CUSTOM_LOGO_KEY);
+            const preview = document.getElementById('modalLogoPreview');
+            const note = document.getElementById('modalLogoSvgNote');
+
+            if (savedLogo) {
+                preview.src = savedLogo;
+                preview.classList.remove('hidden');
+                note.classList.add('hidden');
+            } else if (!document.getElementById('repoLogoImg').classList.contains('hidden')) {
+                preview.src = 'logo.png';
+                preview.classList.remove('hidden');
+                note.classList.add('hidden');
+            } else {
+                preview.classList.add('hidden');
+                note.classList.remove('hidden');
+            }
+
+            document.getElementById('logoModal').classList.remove('hidden');
+        }
+
+        function closeLogoModal() {
+            document.getElementById('logoModal').classList.add('hidden');
+        }
+
+        function loadCustomLogo() {
+            const savedLogo = localStorage.getItem(CUSTOM_LOGO_KEY);
+            if (savedLogo) {
+                document.getElementById('defaultBrandSvg').classList.add('hidden');
+                document.getElementById('repoLogoImg').classList.add('hidden');
+                const img = document.getElementById('customBrandImg');
+                img.src = savedLogo;
+                img.classList.remove('hidden');
+                document.getElementById('btnRestoreDefaultLogo').classList.remove('hidden');
+            }
+        }
+
+        function restoreDefaultLogo() {
+            localStorage.removeItem(CUSTOM_LOGO_KEY);
+            document.getElementById('customBrandImg').classList.add('hidden');
+            document.getElementById('btnRestoreDefaultLogo').classList.add('hidden');
+            
+            const repoImg = document.getElementById('repoLogoImg');
+            if (repoImg.complete && repoImg.naturalWidth > 0) {
+                repoImg.classList.remove('hidden');
+                document.getElementById('defaultBrandSvg').classList.add('hidden');
+            } else {
+                document.getElementById('defaultBrandSvg').classList.remove('hidden');
+            }
+            closeLogoModal();
+            showToast('Logótipo original reposto.');
+        }
+
+        function handleCustomLogoUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                // Preserva a imagem 100% original (cores, fundo e resolução intactos)
+                const originalDataUrl = e.target.result;
+
+                try {
+                    localStorage.setItem(CUSTOM_LOGO_KEY, originalDataUrl);
+                } catch (err) {
+                    showToast('Imagem grande demais para guardar em cache, mas aplicada nesta sessão.');
+                }
+
+                document.getElementById('defaultBrandSvg').classList.add('hidden');
+                document.getElementById('repoLogoImg').classList.add('hidden');
+                const brandImg = document.getElementById('customBrandImg');
+                brandImg.src = originalDataUrl;
+                brandImg.classList.remove('hidden');
+                document.getElementById('btnRestoreDefaultLogo').classList.remove('hidden');
+                
+                // Atualiza também o ícone de ecrã principal do iPhone com a imagem original
+                document.getElementById('appleTouchIcon').href = originalDataUrl;
+                
+                closeLogoModal();
+                showToast('Imagem original aplicada com sucesso!');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // =========================================================================
+        // RENDERIZAÇÃO DA INTERFACE E FILTROS
+        // =========================================================================
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.remove('hidden');
+            clearTimeout(toast._timer);
+            toast._timer = setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 2600);
+        }
+
+        function triggerScanFeedback() {
+            const overlay = document.getElementById('flashOverlay');
+            overlay.classList.remove('flash-success');
+            void overlay.offsetWidth;
+            overlay.classList.add('flash-success');
+            if (navigator.vibrate) {
+                navigator.vibrate(60);
+            }
+        }
+
+        function setFilterTab(tab) {
+            currentFilterTab = tab;
+            const tabs = {
+                all: document.getElementById('tabAll'),
+                counted: document.getElementById('tabCounted'),
+                pending: document.getElementById('tabPending'),
+                diff: document.getElementById('tabDiff')
+            };
+
+            Object.entries(tabs).forEach(([key, el]) => {
+                if (!el) return;
+                if (key === tab) {
+                    el.className = 'px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-white border border-slate-700';
+                } else {
+                    el.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white';
+                }
+            });
+
+            renderUI();
+        }
+
+        function handleSearch() {
+            const q = document.getElementById('searchInput').value.trim();
+            const clearBtn = document.getElementById('clearSearchBtn');
+            const newPrompt = document.getElementById('newArticlePrompt');
+            const newQueryText = document.getElementById('newArticleQueryText');
+
+            if (q.length > 0) {
+                clearBtn.classList.remove('hidden');
+                newPrompt.classList.remove('hidden');
+                newQueryText.textContent = q;
+            } else {
+                clearBtn.classList.add('hidden');
+                newPrompt.classList.add('hidden');
+            }
+
+            renderUI();
+        }
+
+        function clearSearch() {
+            document.getElementById('searchInput').value = '';
+            handleSearch();
+        }
+
+        function renderUI() {
+            const listEl = document.getElementById('itemsList');
+            const emptyEl = document.getElementById('emptyState');
+            const query = document.getElementById('searchInput').value.trim().toLowerCase();
+
+            // Estatísticas globais
+            const countedItems = catalog.filter(i => i.counted !== null && i.counted !== undefined);
+            const totalUnits = countedItems.reduce((acc, i) => acc + (Number(i.counted) || 0), 0);
+            const diffItems = countedItems.filter(i => Number(i.counted) !== Number(i.sysStock || 0));
+
+            document.getElementById('catalogStatus').textContent = `${catalog.length} artigos`;
+            document.getElementById('statCountedItems').textContent = countedItems.length;
+            document.getElementById('statTotalUnits').textContent = Number.isInteger(totalUnits) ? totalUnits : totalUnits.toFixed(2);
+            document.getElementById('statDiffItems').textContent = diffItems.length;
+            document.getElementById('tabCountedBadge').textContent = countedItems.length;
+
+            if (catalog.length === 0) {
+                listEl.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+                return;
+            }
+            emptyEl.classList.add('hidden');
+
+            // Filtragem
+            let filtered = catalog.filter(item => {
+                const isCounted = item.counted !== null && item.counted !== undefined;
+                if (currentFilterTab === 'counted' && !isCounted) return false;
+                if (currentFilterTab === 'pending' && isCounted) return false;
+                if (currentFilterTab === 'diff' && (!isCounted || Number(item.counted) === Number(item.sysStock || 0))) return false;
+
+                if (query) {
+                    const matchRef = (item.ref || '').toLowerCase().includes(query);
+                    const matchEan = (item.ean || '').toLowerCase().includes(query);
+                    const matchDesc = (item.desc || '').toLowerCase().includes(query);
+                    return matchRef || matchEan || matchDesc;
+                }
+                return true;
+            });
+
+            // Ordena os mais recentemente contados no topo quando na vista "Contados"
+            if (currentFilterTab === 'counted') {
+                filtered.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+            }
+
+            // Limitar renderização a 120 cartões para manter fluidez no iPhone
+            const visibleItems = filtered.slice(0, 120);
+
+            if (visibleItems.length === 0) {
+                listEl.innerHTML = `
+                    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 text-center text-xs text-slate-400">
+                        Nenhum artigo encontrado neste filtro.
+                    </div>
+                `;
+                return;
+            }
+
+            listEl.innerHTML = visibleItems.map(item => {
+                const isCounted = item.counted !== null && item.counted !== undefined;
+                const sys = Number(item.sysStock || 0);
+                const cnt = isCounted ? Number(item.counted) : null;
+                const diff = isCounted ? cnt - sys : 0;
+
+                let badgeHtml = `<span class="px-2.5 py-1 rounded-xl bg-slate-800 text-slate-400 text-xs font-bold">Por contar</span>`;
+                if (isCounted) {
+                    const diffLabel = diff === 0 ? 'Certo' : (diff > 0 ? `+${diff}` : `${diff}`);
+                    const diffColor = diff === 0 ? 'text-emerald-400' : 'text-amber-300';
+                    badgeHtml = `
+                        <div class="text-right">
+                            <span class="px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-sm font-black block">
+                                ${cnt} un
+                            </span>
+                            <span class="text-[10px] font-bold ${diffColor} block mt-0.5">Sist: ${sys} (${diffLabel})</span>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div onclick="openCountModal('${escapeHtml(item.id)}')" class="bg-slate-900/90 hover:bg-slate-800/90 border ${isCounted ? 'border-emerald-500/35' : 'border-ag-petrolLight/40'} rounded-2xl p-3.5 flex items-center justify-between gap-3 cursor-pointer transition active:scale-[0.99]">
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-1.5 flex-wrap">
+                                <span class="text-[11px] font-mono font-bold text-ag-gold bg-ag-petrol px-2 py-0.5 rounded-md">${escapeHtml(item.ref || 'S/REF')}</span>
+                                ${item.ean ? `<span class="text-[11px] font-mono text-slate-400">${escapeHtml(item.ean)}</span>` : ''}
+                            </div>
+                            <p class="text-sm font-semibold text-white mt-1 leading-snug line-clamp-2">${escapeHtml(item.desc)}</p>
+                            ${!isCounted ? `<span class="text-[11px] text-slate-400 mt-0.5 block">Stock Sistema: ${sys}</span>` : ''}
+                        </div>
+                        <div class="shrink-0">
+                            ${badgeHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // =========================================================================
+        // MODAL DE CONTAGEM
+        // =========================================================================
+        function openCountModal(itemId, presetQty = 1) {
+            const item = catalog.find(i => i.id === itemId);
+            if (!item) return;
+
+            activeItemId = itemId;
+            document.getElementById('modalItemRef').textContent = item.ref || 'S/REF';
+            document.getElementById('modalItemEan').textContent = item.ean || '';
+            document.getElementById('modalItemDesc').textContent = item.desc;
+            document.getElementById('modalSysStock').textContent = Number(item.sysStock || 0);
+            document.getElementById('modalCurrentCounted').textContent = (item.counted !== null && item.counted !== undefined) ? item.counted : '0';
+            
+            setQtyMode('add');
+            document.getElementById('modalQtyInput').value = presetQty;
+            document.getElementById('countModal').classList.remove('hidden');
+        }
+
+        function closeCountModal() {
+            document.getElementById('countModal').classList.add('hidden');
+            activeItemId = null;
+        }
+
+        function setQtyMode(mode) {
+            qtyMode = mode;
+            const btnAdd = document.getElementById('btnModeAdd');
+            const btnSet = document.getElementById('btnModeSet');
+            if (mode === 'add') {
+                btnAdd.className = 'py-2 rounded-lg text-xs font-extrabold bg-ag-gold text-ag-petrol transition';
+                btnSet.className = 'py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition';
+            } else {
+                btnSet.className = 'py-2 rounded-lg text-xs font-extrabold bg-ag-gold text-ag-petrol transition';
+                btnAdd.className = 'py-2 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition';
+            }
+        }
+
+        function adjustModalQty(delta) {
+            const input = document.getElementById('modalQtyInput');
+            const current = parseFloat(input.value) || 0;
+            const next = Math.max(0, current + delta);
+            input.value = next;
+        }
+
+        function quickAddQty(amount) {
+            const input = document.getElementById('modalQtyInput');
+            const current = parseFloat(input.value) || 0;
+            input.value = current + amount;
+        }
+
+        function confirmItemCount() {
+            const item = catalog.find(i => i.id === activeItemId);
+            if (!item) return;
+
+            const val = parseFloat(document.getElementById('modalQtyInput').value);
+            if (isNaN(val) || val < 0) {
+                showToast('Introduza uma quantidade válida.');
+                return;
+            }
+
+            if (qtyMode === 'add') {
+                const prev = (item.counted !== null && item.counted !== undefined) ? Number(item.counted) : 0;
+                item.counted = Number((prev + val).toFixed(4));
+            } else {
+                item.counted = Number(val.toFixed(4));
+            }
+
+            item.updatedAt = Date.now();
+            saveToStorage();
+            closeCountModal();
+            renderUI();
+            triggerScanFeedback();
+            showToast(`Registado: ${item.ref} → ${item.counted} un`);
+        }
+
+        function resetSingleItemCount() {
+            const item = catalog.find(i => i.id === activeItemId);
+            if (!item) return;
+            item.counted = null;
+            item.updatedAt = null;
+            saveToStorage();
+            closeCountModal();
+            renderUI();
+            showToast('Contagem do artigo zerada.');
+        }
+
+        // =========================================================================
+        // LEITOR DE CÓDIGO DE BARRAS (CÂMARA IOS)
+        // =========================================================================
+        async function toggleScanner() {
+            if (isScanning) {
+                await stopScanner();
+            } else {
+                await startScanner();
+            }
+        }
+
+        async function startScanner() {
+            const container = document.getElementById('scannerContainer');
+            const errBox = document.getElementById('scannerError');
+            const btnText = document.getElementById('btnScannerText');
+
+            errBox.classList.add('hidden');
+            container.classList.remove('hidden');
+
+            try {
+                if (!html5QrCode) {
+                    html5QrCode = new Html5Qrcode("reader");
+                }
+
+                await html5QrCode.start(
+                    { facingMode: "environment" },
+                    {
+                        fps: 12,
+                        qrbox: { width: 260, height: 130 },
+                        aspectRatio: 1.777
+                    },
+                    onBarcodeScanned,
+                    () => {}
+                );
+
+                isScanning = true;
+                btnText.textContent = 'Parar Câmara';
+            } catch (err) {
+                container.classList.add('hidden');
+                errBox.classList.remove('hidden');
+                errBox.textContent = 'Não foi possível aceder à câmara. Certifique-se de que abriu a página em HTTPS (GitHub Pages) no Safari e deu permissão à câmara.';
+                isScanning = false;
+            }
+        }
+
+        async function stopScanner() {
+            const container = document.getElementById('scannerContainer');
+            const btnText = document.getElementById('btnScannerText');
+            try {
+                if (html5QrCode && isScanning) {
+                    await html5QrCode.stop();
+                }
+            } catch (e) {
+                console.warn(e);
+            }
+            isScanning = false;
+            container.classList.add('hidden');
+            btnText.textContent = 'Ler Código de Barras';
+        }
+
+        function onBarcodeScanned(decodedText) {
+            const now = Date.now();
+            if (decodedText === lastScannedCode && (now - lastScanTime) < 1800) {
+                return;
+            }
+            lastScannedCode = decodedText;
+            lastScanTime = now;
+
+            const cleanCode = decodedText.trim();
+            const found = catalog.find(i => (i.ean && i.ean.trim() === cleanCode) || (i.ref && i.ref.trim() === cleanCode));
+
+            triggerScanFeedback();
+
+            if (found) {
+                openCountModal(found.id, 1);
+            } else {
+                document.getElementById('searchInput').value = cleanCode;
+                handleSearch();
+                showToast(`Código ${cleanCode} não encontrado. Pode criá-lo abaixo.`);
+            }
+        }
+
+        function toggleTorch() {
+            if (!html5QrCode || !isScanning) return;
+            torchOn = !torchOn;
+            html5QrCode.applyVideoConstraints({
+                advanced: [{ torch: torchOn }]
+            }).catch(() => showToast('Lanterna não suportada neste modo.'));
+        }
+
+        // =========================================================================
+        // IMPORTAÇÃO EXCEL / CSV (ETICADATA) E DADOS DE EXEMPLO
+        // =========================================================================
+        function openImportModal() {
+            document.getElementById('importModal').classList.remove('hidden');
+        }
+
+        function closeImportModal() {
+            document.getElementById('importModal').classList.add('hidden');
+        }
+
+        function handleImportFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+                    if (!json || json.length === 0) {
+                        showToast('O ficheiro está vazio.');
+                        return;
+                    }
+
+                    rawImportedRows = json;
+                    importedHeaders = Object.keys(json[0]);
+
+                    populateColumnSelectors(importedHeaders);
+                    document.getElementById('importPreviewCount').textContent = `${json.length} artigos detetados no ficheiro`;
+                    document.getElementById('columnMappingSection').classList.remove('hidden');
+                } catch (err) {
+                    showToast('Erro ao ler o ficheiro Excel/CSV.');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function populateColumnSelectors(headers) {
+            const selectors = ['mapColRef', 'mapColEan', 'mapColDesc', 'mapColStock'];
+            selectors.forEach(id => {
+                const sel = document.getElementById(id);
+                sel.innerHTML = `<option value="">-- Ignorar --</option>` + headers.map(h => `<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join('');
+            });
+
+            // Auto-deteção inteligente de colunas Eticadata
+            headers.forEach(h => {
+                const low = h.toLowerCase();
+                if (low.includes('cod') || low.includes('ref') || low.includes('artigo')) {
+                    if (!document.getElementById('mapColRef').value) document.getElementById('mapColRef').value = h;
+                }
+                if (low.includes('ean') || low.includes('barra')) {
+                    document.getElementById('mapColEan').value = h;
+                }
+                if (low.includes('desc') || low.includes('nome') || low.includes('designa')) {
+                    document.getElementById('mapColDesc').value = h;
+                }
+                if (low.includes('stock') || low.includes('qtd') || low.includes('exist')) {
+                    document.getElementById('mapColStock').value = h;
+                }
+            });
+        }
+
+        function confirmImportMapping() {
+            const colRef = document.getElementById('mapColRef').value;
+            const colEan = document.getElementById('mapColEan').value;
+            const colDesc = document.getElementById('mapColDesc').value;
+            const colStock = document.getElementById('mapColStock').value;
+
+            if (!colRef && !colDesc) {
+                showToast('Selecione pelo menos a coluna Referência ou Descrição.');
+                return;
+            }
+
+            catalog = rawImportedRows.map((row, idx) => ({
+                id: 'item_' + Date.now() + '_' + idx,
+                ref: colRef ? String(row[colRef]).trim() : `ART-${idx + 1}`,
+                ean: colEan ? String(row[colEan]).trim() : '',
+                desc: colDesc ? String(row[colDesc]).trim() : String(row[colRef] || 'Sem descrição'),
+                sysStock: colStock ? (parseFloat(String(row[colStock]).replace(',', '.')) || 0) : 0,
+                counted: null,
+                updatedAt: null
+            })).filter(i => i.ref || i.desc);
+
+            saveToStorage();
+            closeImportModal();
+            renderUI();
+            showToast(`${catalog.length} artigos importados com sucesso!`);
+        }
+
+        function loadSampleData() {
+            catalog = [
+                { id: 's1', ref: '21011', ean: '5601843210114', desc: 'Interruptor Simples Efapel Logus 90 Branco', sysStock: 24, counted: null, updatedAt: null },
+                { id: 's2', ref: '21151', ean: '5601843211517', desc: 'Tomada Schuko c/ Terra Efapel Logus 90 Branco', sysStock: 40, counted: 40, updatedAt: Date.now() - 50000 },
+                { id: 's3', ref: 'C16-1P', ean: '3250614311161', desc: 'Disjuntor Hager 1P+N 16A Curva C 6kA', sysStock: 15, counted: 14, updatedAt: Date.now() - 20000 },
+                { id: 's4', ref: 'XV-3G2.5', ean: '5600001000254', desc: 'Cabo Elétrico XV 3G2.5mm² Preto (Metro)', sysStock: 200, counted: null, updatedAt: null },
+                { id: 's5', ref: 'WAGO-221-413', ean: '4050821808442', desc: 'Ligador Rápido Wago 221-413 3 Fios (Cx. 50)', sysStock: 8, counted: null, updatedAt: null }
+            ];
+            saveToStorage();
+            renderUI();
+            showToast('Dados de exemplo carregados.');
+        }
+
+        // =========================================================================
+        // CRIAR ARTIGO NOVO MANUAL
+        // =========================================================================
+        function openNewItemModal() {
+            const currentQuery = document.getElementById('searchInput').value.trim();
+            document.getElementById('newItemRef').value = isNaN(currentQuery) ? currentQuery : '';
+            document.getElementById('newItemEan').value = !isNaN(currentQuery) ? currentQuery : '';
+            document.getElementById('newItemDesc').value = '';
+            document.getElementById('newItemQty').value = 1;
+            document.getElementById('newItemModal').classList.remove('hidden');
+        }
+
+        function closeNewItemModal() {
+            document.getElementById('newItemModal').classList.add('hidden');
+        }
+
+        function saveNewItem() {
+            const ref = document.getElementById('newItemRef').value.trim();
+            const ean = document.getElementById('newItemEan').value.trim();
+            const desc = document.getElementById('newItemDesc').value.trim();
+            const qty = parseFloat(document.getElementById('newItemQty').value) || 0;
+
+            if (!ref && !desc) {
+                showToast('Preencha a referência ou descrição.');
+                return;
+            }
+
+            const newItem = {
+                id: 'manual_' + Date.now(),
+                ref: ref || 'NOVO',
+                ean: ean,
+                desc: desc || ref,
+                sysStock: 0,
+                counted: qty,
+                updatedAt: Date.now()
+            };
+
+            catalog.unshift(newItem);
+            saveToStorage();
+            closeNewItemModal();
+            clearSearch();
+            renderUI();
+            showToast('Novo artigo criado e contado!');
+        }
+
+        // =========================================================================
+        // EXPORTAR E LIMPAR
+        // =========================================================================
+        function openExportModal() {
+            document.getElementById('exportModal').classList.remove('hidden');
+        }
+
+        function closeExportModal() {
+            document.getElementById('exportModal').classList.add('hidden');
+        }
+
+        function exportData(format) {
+            const onlyCounted = document.getElementById('exportOnlyCounted').checked;
+            const list = onlyCounted
+                ? catalog.filter(i => i.counted !== null && i.counted !== undefined)
+                : catalog;
+
+            if (list.length === 0) {
+                showToast('Não existem artigos para exportar.');
+                return;
+            }
+
+            const rows = list.map(i => {
+                const cnt = (i.counted !== null && i.counted !== undefined) ? Number(i.counted) : 0;
+                const sys = Number(i.sysStock || 0);
+                return {
+                    'Referencia': i.ref,
+                    'Codigo_Barras': i.ean,
+                    'Descricao': i.desc,
+                    'Stock_Sistema': sys,
+                    'Quantidade_Contada': cnt,
+                    'Diferenca': Number((cnt - sys).toFixed(4))
+                };
+            });
+
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
+
+            const dateStr = new Date().toISOString().slice(0, 10);
+            const filename = `Inventario_AntonioGarcia_${dateStr}.${format}`;
+            XLSX.writeFile(wb, filename);
+
+            closeExportModal();
+            showToast(`Ficheiro ${filename} gerado!`);
+        }
+
+        function openResetModal() {
+            document.getElementById('resetModal').classList.remove('hidden');
+        }
+
+        function closeResetModal() {
+            document.getElementById('resetModal').classList.add('hidden');
+        }
+
+        function resetCountsOnly() {
+            catalog.forEach(i => {
+                i.counted = null;
+                i.updatedAt = null;
+            });
+            saveToStorage();
+            closeResetModal();
+            renderUI();
+            showToast('Todas as contagens foram zeradas.');
+        }
+
+        function resetAllData() {
+            catalog = [];
+            saveToStorage();
+            closeResetModal();
+            renderUI();
+            showToast('Todos os dados foram apagados.');
+        }
+
+        function openHelpModal() {
+            document.getElementById('helpModal').classList.remove('hidden');
+        }
+
+        function closeHelpModal() {
+            document.getElementById('helpModal').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
