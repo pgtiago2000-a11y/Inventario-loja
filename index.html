@@ -48,6 +48,9 @@
     <!-- SheetJS (XLSX / CSV Import & Export) -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     
+    <!-- PDF.js (Leitura direta do PDF AnaliseStocks.pdf do Eticadata) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
     <!-- HTML5-QRCode (Leitor de Código de Barras Câmara iOS) -->
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
@@ -285,12 +288,12 @@
                 <div class="space-y-1">
                     <h3 class="text-base font-bold text-white">Sem artigos carregados</h3>
                     <p class="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
-                        Importe a listagem de artigos exportada do Eticadata (Excel ou CSV) ou carregue dados de teste para experimentar.
+                        Importe o PDF <strong>AnaliseStocks.pdf</strong> ou a listagem Excel/CSV exportada do Eticadata para começar a contar.
                     </p>
                 </div>
                 <div class="flex flex-col sm:flex-row gap-2.5 justify-center pt-1">
-                    <button onclick="openImportModal()" class="px-4 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-sm transition">
-                        Importar Excel / CSV
+                    <button onclick="openImportModal()" class="px-4 py-3 rounded-xl bg-ag-gold hover:bg-ag-goldHover text-ag-petrol font-extrabold text-sm transition">
+                        Importar PDF / Excel / CSV
                     </button>
                     <button onclick="loadSampleData()" class="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-sm transition">
                         Carregar Dados de Exemplo
@@ -410,12 +413,12 @@
             </div>
 
             <p class="text-xs text-slate-300 leading-relaxed">
-                Selecione o ficheiro <strong>.XLSX</strong>, <strong>.XLS</strong> ou <strong>.CSV</strong> exportado do Eticadata com a listagem de artigos.
+                Selecione o ficheiro <strong>.PDF</strong> (<em>AnaliseStocks.pdf</em>), <strong>.XLSX</strong>, <strong>.XLS</strong> ou <strong>.CSV</strong> exportado do Eticadata.
             </p>
 
             <label class="w-full py-4 px-4 rounded-2xl border-2 border-dashed border-ag-gold/50 bg-ag-petrol/40 hover:bg-ag-petrol/70 text-center cursor-pointer block transition">
-                <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" onchange="handleImportFile(event)" class="hidden">
-                <span class="text-sm font-bold text-ag-gold block">Escolher Ficheiro Excel ou CSV</span>
+                <input type="file" id="importFileInput" accept=".pdf,.xlsx,.xls,.csv" onchange="handleImportFile(event)" class="hidden">
+                <span class="text-sm font-bold text-ag-gold block">Escolher PDF (AnaliseStocks) ou Excel</span>
                 <span class="text-[11px] text-slate-400 mt-1 block">Os dados ficam guardados apenas no seu iPhone</span>
             </label>
 
@@ -956,10 +959,11 @@
                 if (isCounted) {
                     const diffLabel = diff === 0 ? 'Certo' : (diff > 0 ? `+${diff}` : `${diff}`);
                     const diffColor = diff === 0 ? 'text-emerald-400' : 'text-amber-300';
+                    const unitLabel = item.unit || 'un';
                     badgeHtml = `
                         <div class="text-right">
                             <span class="px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-sm font-black block">
-                                ${cnt} un
+                                ${cnt} ${escapeHtml(unitLabel)}
                             </span>
                             <span class="text-[10px] font-bold ${diffColor} block mt-0.5">Sist: ${sys} (${diffLabel})</span>
                         </div>
@@ -971,10 +975,11 @@
                         <div class="min-w-0 flex-1">
                             <div class="flex items-center gap-1.5 flex-wrap">
                                 <span class="text-[11px] font-mono font-bold text-ag-gold bg-ag-petrol px-2 py-0.5 rounded-md">${escapeHtml(item.ref || 'S/REF')}</span>
+                                ${item.unit ? `<span class="text-[10px] font-bold uppercase text-sky-300 bg-sky-950/80 border border-sky-800/60 px-1.5 py-0.5 rounded">${escapeHtml(item.unit)}</span>` : ''}
                                 ${item.ean ? `<span class="text-[11px] font-mono text-slate-400">${escapeHtml(item.ean)}</span>` : ''}
                             </div>
                             <p class="text-sm font-semibold text-white mt-1 leading-snug line-clamp-2">${escapeHtml(item.desc)}</p>
-                            ${!isCounted ? `<span class="text-[11px] text-slate-400 mt-0.5 block">Stock Sistema: ${sys}</span>` : ''}
+                            ${!isCounted ? `<span class="text-[11px] text-slate-400 mt-0.5 block">Stock Sistema: ${sys} ${escapeHtml(item.unit || '')}</span>` : ''}
                         </div>
                         <div class="shrink-0">
                             ${badgeHtml}
@@ -985,45 +990,158 @@
         }
 
         // =========================================================================
-        // MODAL DE CONTAGEM
+        // IMPORTAÇÃO PDF / EXCEL / CSV (ETICADATA) E DADOS DE EXEMPLO
         // =========================================================================
-        function openCountModal(itemId, presetQty = 1) {
-            const item = catalog.find(i => i.id === itemId);
-            if (!item) return;
-
-            activeItemId = itemId;
-            document.getElementById('modalItemRef').textContent = item.ref || 'S/REF';
-            document.getElementById('modalItemEan').textContent = item.ean ? `• ${item.ean}` : '';
-            document.getElementById('modalEanInput').value = item.ean || '';
-            document.getElementById('modalItemDesc').textContent = item.desc;
-            document.getElementById('modalSysStock').textContent = Number(item.sysStock || 0);
-            document.getElementById('modalCurrentCounted').textContent = (item.counted !== null && item.counted !== undefined) ? item.counted : '0';
-            
-            setQtyMode('add');
-            document.getElementById('modalQtyInput').value = presetQty;
-            document.getElementById('countModal').classList.remove('hidden');
+        function openImportModal() {
+            document.getElementById('importModal').classList.remove('hidden');
         }
 
-        async function closeCountModal() {
-            await stopLinkEanScanner();
-            document.getElementById('countModal').classList.add('hidden');
-            activeItemId = null;
+        function closeImportModal() {
+            document.getElementById('importModal').classList.add('hidden');
         }
 
-        function updateActiveItemEan() {
-            const item = catalog.find(i => i.id === activeItemId);
-            if (!item) return;
-            const newEan = document.getElementById('modalEanInput').value.trim();
-            item.ean = newEan;
-            document.getElementById('modalItemEan').textContent = newEan ? `• ${newEan}` : '';
-            saveToStorage();
+        async function handleImportFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const fileName = file.name.toLowerCase();
+
+            if (fileName.endsWith('.pdf')) {
+                await handlePdfImport(file);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+                    if (!json || json.length === 0) {
+                        showToast('O ficheiro está vazio.');
+                        return;
+                    }
+
+                    rawImportedRows = json;
+                    importedHeaders = Object.keys(json[0]);
+
+                    populateColumnSelectors(importedHeaders);
+                    document.getElementById('importPreviewCount').textContent = `${json.length} artigos detetados no ficheiro`;
+                    document.getElementById('columnMappingSection').classList.remove('hidden');
+                } catch (err) {
+                    showToast('Erro ao ler o ficheiro Excel/CSV.');
+                }
+            };
+            reader.readAsArrayBuffer(file);
         }
 
-        async function toggleLinkEanScanner() {
-            if (isLinkScanning) {
-                await stopLinkEanScanner();
-            } else {
-                await startLinkEanScanner();
+        // Extrai automaticamente os artigos do relatório PDF "Análise de Stocks" do Eticadata
+        async function handlePdfImport(file) {
+            try {
+                showToast('A ler páginas do PDF Eticadata...');
+                if (window.pdfjsLib) {
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                }
+
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const extractedRows = [];
+
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    const page = await pdf.getPage(pageNum);
+                    const textContent = await page.getTextContent();
+
+                    // Agrupar itens de texto pela coordenada Y (mesma linha visual no relatório)
+                    const linesMap = {};
+                    for (const item of textContent.items) {
+                        const str = item.str.trim();
+                        if (!str) continue;
+                        const y = Math.round(item.transform[5] / 3) * 3;
+                        if (!linesMap[y]) linesMap[y] = [];
+                        linesMap[y].push({ x: item.transform[4], text: str });
+                    }
+
+                    const sortedYs = Object.keys(linesMap).map(Number).sort((a, b) => b - a);
+                    for (const y of sortedYs) {
+                        const rowItems = linesMap[y].sort((a, b) => a.x - b.x);
+                        const fullLine = rowItems.map(i => i.text).join(' ');
+
+                        // Ignorar cabeçalhos e rodapés do relatório Eticadata
+                        if (
+                            fullLine.includes('Antonio Garcia') ||
+                            fullLine.includes('ANTÓNIO GARCIA') ||
+                            fullLine.includes('Análise de Stocks') ||
+                            fullLine.includes('Valorização a:') ||
+                            fullLine.includes('Stock Real:') ||
+                            fullLine.includes('Incluir Artigos') ||
+                            fullLine.includes('PC Médio') ||
+                            fullLine.includes('Emitido em:') ||
+                            fullLine.includes('AnaliseStocks') ||
+                            fullLine.includes('Analise Stocks') ||
+                            /^Total\s/i.test(fullLine)
+                        ) {
+                            continue;
+                        }
+
+                        // Procurar colunas numéricas finais (Stock Real, PC Médio, PC Último, PC Ref., Valor Stock)
+                        // Exemplo típico: [Ref] [Descrição...] [Un/Mt] [2,000] [25,9900] [26,8800] [26,8800] [51,98]
+                        const numPattern = /^-?\d[\d\s]*,\d{2,4}$/;
+                        const numIndices = [];
+                        rowItems.forEach((cell, idx) => {
+                            if (numPattern.test(cell.text)) {
+                                numIndices.push(idx);
+                            }
+                        });
+
+                        if (numIndices.length >= 2 && rowItems.length >= 4) {
+                            const firstNumIdx = numIndices[0];
+                            const stockStr = rowItems[firstNumIdx].text.replace(/\s+/g, '').replace(',', '.');
+                            const sysStock = parseFloat(stockStr) || 0;
+
+                            const leftCells = rowItems.slice(0, firstNumIdx).map(c => c.text);
+                            const ref = leftCells[0] || '';
+                            let unit = 'Un';
+                            const descParts = [];
+
+                            for (let i = 1; i < leftCells.length; i++) {
+                                const token = leftCells[i];
+                                if (token === 'Un' || token === 'Mt' || token === 'Cj') {
+                                    unit = token;
+                                } else {
+                                    descParts.push(token);
+                                }
+                            }
+
+                            const desc = descParts.join(' ').trim();
+                            if (ref && (desc || sysStock !== 0)) {
+                                extractedRows.push({
+                                    'Referencia': ref,
+                                    'Codigo_Barras': '',
+                                    'Descricao': desc || ref,
+                                    'Unidade': unit,
+                                    'Stock_Real': sysStock
+                                });
+                            }
+                        }
+                    }
+                }
+
+                if (extractedRows.length === 0) {
+                    showToast('Não foi possível extrair artigos deste PDF.');
+                    return;
+                }
+
+                rawImportedRows = extractedRows;
+                importedHeaders = ['Referencia', 'Codigo_Barras', 'Descricao', 'Unidade', 'Stock_Real'];
+                populateColumnSelectors(importedHeaders);
+                document.getElementById('importPreviewCount').textContent = `${extractedRows.length} artigos extraídos do PDF (${pdf.numPages} páginas)`;
+                document.getElementById('columnMappingSection').classList.remove('hidden');
+                showToast(`${extractedRows.length} artigos lidos do PDF!`);
+            } catch (err) {
+                console.error(err);
+                showToast('Erro ao processar o ficheiro PDF.');
             }
         }
 
@@ -1330,6 +1448,7 @@
                 ref: colRef ? String(row[colRef]).trim() : `ART-${idx + 1}`,
                 ean: colEan ? String(row[colEan]).trim() : '',
                 desc: colDesc ? String(row[colDesc]).trim() : String(row[colRef] || 'Sem descrição'),
+                unit: row['Unidade'] ? String(row['Unidade']).trim() : '',
                 sysStock: colStock ? (parseFloat(String(row[colStock]).replace(',', '.')) || 0) : 0,
                 counted: null,
                 updatedAt: null
